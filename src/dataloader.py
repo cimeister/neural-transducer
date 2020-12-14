@@ -32,6 +32,8 @@ class Seq2SeqDataLoader(Dataloader):
         dev_file: List[str],
         test_file: Optional[List[str]] = None,
         shuffle=False,
+        src_vocab: Optional[List[str]] = None,
+        trgt_vocab: Optional[List[str]] = None
     ):
         super().__init__()
         self.train_file = train_file[0] if len(train_file) == 1 else train_file
@@ -43,7 +45,11 @@ class Seq2SeqDataLoader(Dataloader):
         self.batch_data: Dict[str, List] = dict()
         self.nb_train, self.nb_dev, self.nb_test = 0, 0, 0
         self.nb_attr = 0
-        self.source, self.target = self.build_vocab()
+        if not src_vocab or not trgt_vocab:
+            self.source, self.target = self.build_vocab()
+        else:
+            self.source = self.vocab_from_file(src_vocab)
+            self.target = self.vocab_from_file(trgt_vocab)
         self.source_vocab_size = len(self.source)
         self.target_vocab_size = len(self.target)
         self.attr_c2i: Optional[Dict]
@@ -76,12 +82,20 @@ class Seq2SeqDataLoader(Dataloader):
             self.nb_train += 1
             src_set.update(src)
             trg_set.update(trg)
-        self.nb_dev = sum([1 for _ in self.read_file(self.dev_file)])
+        self.nb_dev = sum([1 for _ in self.read_file(self.dev_file)]) if self.dev_file else 0
         if self.test_file is not None:
             self.nb_test = sum([1 for _ in self.read_file(self.test_file)])
         source = [PAD, BOS, EOS, UNK] + sorted(list(src_set))
         target = [PAD, BOS, EOS, UNK] + sorted(list(trg_set))
         return source, target
+
+    def vocab_from_file(self, fle):
+        with open(fle, "r", encoding="utf-8") as f:
+            return f.read().splitlines()
+    
+    def vocab_to_file(self, fle, vocab):
+        with open(fle, "w", encoding="utf-8") as f:
+            f.write("\n".join(vocab))
 
     def read_file(self, file):
         raise NotImplementedError
@@ -579,11 +593,51 @@ class StandardG2P(Seq2SeqDataLoader):
                     yield grapheme.split(" "), phoneme.split(" ")
 
 
+class StandardWord2P(Seq2SeqDataLoader):
+    def read_file(self, file):
+        try:
+            with open(file, "r", encoding="utf-8") as fp:
+                for line in fp.readlines():
+                    grapheme, phoneme = line.strip().split("\t")
+                    for ph in phoneme.split(", "):
+                        yield list(grapheme), list(ph)
+        except UnicodeDecodeError:
+            with open(file, "r", encoding="utf-8", errors="replace") as fp:
+                for line in fp.readlines():
+                    grapheme, phoneme = line.strip().split("\t")
+                    for ph in phoneme.split(", "):
+                        yield list(grapheme), list(ph)
+
+
 class StandardP2G(StandardG2P):
     def read_file(self, file):
         for grapheme, phoneme in super().read_file(file):
             yield phoneme, grapheme
 
+
+class StandardP2Word(StandardWord2P):
+    def read_file(self, file):
+        for grapheme, phoneme in super().read_file(file):
+            yield phoneme, grapheme
+
+
+class InferenceP2Word(Seq2SeqDataLoader):
+    def read_file(self, file):
+        try:
+            with open(file, "r", encoding="utf-8") as fp:
+                for line in fp.readlines():
+                    phoneme = line.strip().split("\t")
+                    assert len(phoneme) == 1, "Only 1 phoneme per line in inference mode" 
+                    for ph in phoneme[0].split(", "):
+                        yield list(ph), []
+    
+        except UnicodeDecodeError:
+            with open(file, "r", encoding="utf-8", errors="replace") as fp:
+                for line in fp.readlines():
+                    phoneme = line.strip().split("\t")
+                    assert len(phoneme) == 1, "Only 1 phoneme per line in inference mode"
+                    for ph in phoneme[0].split(", "):
+                        yield list(ph), []
 
 class AlignStandardG2P(AlignSeq2SeqDataLoader, StandardG2P):
     pass

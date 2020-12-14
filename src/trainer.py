@@ -86,8 +86,8 @@ class BaseTrainer(object):
         # fmt: off
         parser = self.parser
         parser.add_argument('--seed', default=0, type=int)
-        parser.add_argument('--train', required=True, type=str, nargs='+')
-        parser.add_argument('--dev', required=True, type=str, nargs='+')
+        parser.add_argument('--train', default=None, type=str, nargs='+')
+        parser.add_argument('--dev', default=None, type=str, nargs='+')
         parser.add_argument('--test', default=None, type=str, nargs='+')
         parser.add_argument('--model', required=True, help='dump model filename')
         parser.add_argument('--load', default='', help='load model and continue training; with `smart`, recover training automatically')
@@ -220,7 +220,7 @@ class BaseTrainer(object):
             return self.scheduler.get_last_lr()[0]
         except AttributeError:
             return self.scheduler.get_lr()[0]
-
+    
     def train(self, epoch_idx, batch_size, max_norm):
         logger, model = self.logger, self.model
         logger.info("At %d-th epoch with lr %f.", epoch_idx, self.get_lr())

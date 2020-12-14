@@ -170,6 +170,7 @@ venv.bak/
 
 # Training
 model/
+checkpoints/
 data/
 decode/
 eval/
